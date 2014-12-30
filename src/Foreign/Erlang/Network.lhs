@@ -17,7 +17,7 @@
 > import Data.Binary.Put
 > import Data.Bits                ((.|.))
 > import Data.Char                (chr, ord)
-> import Data.Digest.OpenSSL.MD5  (md5sum)
+> import Data.Digest.Pure.MD5     (md5)
 > import Data.List                (unfoldr)
 > import Data.Word
 > import Foreign.Erlang.Types
@@ -60,7 +60,7 @@
 
 > erlDigest                  :: String -> Word32 -> [Word8]
 > erlDigest cookie challenge = let
->     [(n, _)] = readHex . md5sum . C.pack $ cookie ++ show challenge
+>     [(n, _)] = readHex . show . md5 . B.pack $ cookie ++ show challenge
 >     in toNetwork 16 n
 
 > packn, packN :: B.ByteString -> Put

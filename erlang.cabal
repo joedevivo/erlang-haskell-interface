@@ -1,5 +1,5 @@
 name:                erlang
-version:             0.1
+version:             0.1.1
 stability:           alpha
 description:
   Speaks the Erlang network protocol and impersonates an Erlang node
@@ -8,10 +8,10 @@ description:
   types.  Messages to Erlang are just function calls in Haskell, and
   messages from Erlang are delivered to MVars.
 license:             GPL
-license-file:        COPYING
-author:              Eric Sessoms <nubgames@gmail.com>
-maintainer:          nubgames@gmail.com
-homepage:            http://github.com/esessoms/haskell-interface
+license-file:        LICENSE
+author:              Joe DeVivo <joe@devivo.com>
+maintainer:          joe@devivo.com
+homepage:            http://github.com/joedevivo/erlang-haskell-interface
 category:            Foreign
 synopsis:            FFI interface to Erlang.
 cabal-version:       >= 1.2
@@ -23,7 +23,7 @@ library
                      bytestring,
                      directory,
                      filepath,
-                     nano-md5 >= 0.1.2,
+                     pureMD5 >= 2.1.2.1,
                      network >= 2.2.0.1,
                      random >= 1.0.0.1
   exposed-modules:   Foreign.Erlang
