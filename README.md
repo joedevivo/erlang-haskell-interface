@@ -17,3 +17,25 @@ Erlang Distribution Protocol, which is fortunately documented
 
 In this project, the module that really talks to EPMD is
 [Network](src/Foreign/Erlang/Network.lhs)
+
+
+## Current Status
+
+`runghc Test` will start a haskell erlang node that registers itself
+with EPMD and will respond to "SEND_NAME" as defined by the Erlang
+Distribution Protocol
+
+
+### Communication notes from JInterface
+
+```java
+OtpNode node = new OtpNode("node@host", "cookie");
+
+// calls
+
+OtpEpmd.publishPort(OtpNode.this);
+
+// https://github.com/erlang/otp/blob/maint/lib/jinterface/java_src/com/ericsson/otp/erlang/OtpEpmd.java#L280
+r4_publish(node);
+
+```

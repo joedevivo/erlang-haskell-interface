@@ -7,6 +7,8 @@ module Foreign.Erlang.Network (
   , ErlSend
   , erlConnect
   , toNetwork
+  , epmdSend
+  , epmdAlive2Req
   ) where
 
 import Control.Exception        (assert, bracketOnError)
@@ -182,6 +184,26 @@ epmdSend msg = withEpmd $ \hdl -> do
     B.hPut hdl out
     hFlush hdl
     B.hGetContents hdl
+
+epmdAlive2Req :: String -> Int -> IO ()-- B.ByteString
+epmdAlive2Req node port = withEpmd $ \hdl -> do
+    let msg = runPut $ tag 'x' >>
+                       putn port >>
+                       putC 77 >> -- node type
+                       putC 0 >>  -- protocol
+                       putn erlangVersion >>
+                       putn erlangVersion >>
+                       putn (length node) >>
+                       putA node >>
+                       putn 0 -- "Extra" length, 0 for none
+    let len = fromIntegral $ B.length msg
+    let out = runPut $ putn len >> putLazyByteString msg
+    let loop n = loop n
+    B.hPut hdl out
+    hFlush hdl
+    B.hGetContents hdl
+    return ()
+    loop 0
 
 -- | Return the names and addresses of all registered Erlang nodes.
 epmdGetNames :: IO [String]

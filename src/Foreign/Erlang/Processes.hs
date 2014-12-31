@@ -21,6 +21,7 @@ import Control.Concurrent  (forkIO)
 import Control.Concurrent.MVar
 import Data.Maybe          (fromJust)
 import Foreign.Erlang.Network
+import qualified Foreign.Erlang.Server as Server
 import Foreign.Erlang.Types
 
 -- | The name of an Erlang node on the network.
@@ -50,6 +51,8 @@ genRef nodename id = ErlNewRef (ErlAtom nodename) 1 . toNetwork 4 . fromIntegral
 -- | Instantiate a Haskell node.  This initializes the FFI.
 createSelf          :: String -> IO Self
 createSelf nodename = do
+    putStrLn "createSelf"
+    forkIO $ Server.serve nodename
     inbox <- newEmptyMVar
     forkIO $ self nodename inbox
     return . Self $ putMVar inbox
