@@ -18,7 +18,7 @@ import Foreign.Erlang.Network
 import Foreign.Erlang.Types
 import qualified Data.ByteString.Lazy.Char8 as B
 
-type HandlerFunc = SockAddr -> Socket -> B.ByteString -> IO ()
+type HandlerFunc = SockAddr -> Handle -> B.ByteString -> IO ()
 
 serve :: String -> IO ()
 serve nodename = withSocketsDo $
@@ -48,7 +48,7 @@ serve nodename = withSocketsDo $
           procRequests :: MVar () -> Socket -> IO ()
           procRequests lock mastersock =
               do (connsock, clientaddr) <- accept mastersock
-                 handleLog lock clientaddr connsock $
+                 handleLog lock clientaddr $
                     B.pack "Foreign.Erlang.Server: client connnected"
                  forkIO $ procMessages lock connsock clientaddr
                  procRequests lock mastersock
@@ -60,26 +60,26 @@ serve nodename = withSocketsDo $
                  hSetBuffering connhdl LineBuffering
                  messages <- B.hGetContents connhdl
                  --mapM_ (handle lock clientaddr) (B.lines messages)
-                 handleMessage lock clientaddr connsock messages
+                 handleMessage lock clientaddr connhdl messages
                  hClose connhdl
-                 handleLog lock clientaddr connsock $
+                 handleLog lock clientaddr $
                     B.pack "Foreign.Erlang.Server: client disconnected"
 
           -- Lock the handler before passing data to it.
-          handleLog :: MVar () -> HandlerFunc
+          handleLog :: MVar () -> SockAddr -> B.ByteString -> IO ()
           -- This type is the same as
-          -- handle :: MVar () -> SockAddr -> Socket -> String -> IO ()
-          handleLog lock clientaddr sock msg =
+          -- handle :: MVar () -> SockAddr -> String -> IO ()
+          handleLog lock clientaddr msg =
               withMVar lock
-                 (\a -> plainHandler clientaddr sock msg >> return a)
+                 (\a -> plainHandler clientaddr msg >> return a)
           handleMessage :: MVar() -> HandlerFunc
           handleMessage lock clientaddr sock msg =
               withMVar lock
                  (\a -> erlangHandler clientaddr sock msg >> return a)
 
 -- A simple handler that prints incoming packets
-plainHandler :: HandlerFunc
-plainHandler addr _ msg =
+plainHandler ::  SockAddr -> B.ByteString -> IO ()
+plainHandler addr msg =
     putStrLn $ "From " ++ show addr ++ ": " ++ show msg
 
 {-
@@ -98,14 +98,5 @@ We need an erlang handler that:
 
 -}
 erlangHandler :: HandlerFunc
-erlangHandler addr sock msg =
-    -- extract SEND_NAME
-    let r = flip runGet msg $ do
-          l <- getn
-          msgType <- getC
-          erlVer <- getn
-          flags <- getN
-          name <- liftM B.unpack getRemainingLazyByteString
-          return (l, msgType, erlVer, flags, name)
-    in
-    putStrLn $ "SEND_NAME received: " ++ show r
+erlangHandler addr handle msg =
+    handshakeS handle

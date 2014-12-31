@@ -9,6 +9,7 @@ module Foreign.Erlang.Network (
   , toNetwork
   , epmdSend
   , epmdAlive2Req
+  , handshakeS
   ) where
 
 import Control.Exception        (assert, bracketOnError)
@@ -170,6 +171,30 @@ handshake out inf self = do
         msg <- inf
         let reply = take 16 . drop 1 . map (fromIntegral . ord) . B.unpack $ msg
         assert (digest == reply) $ return ()
+
+handshakeS :: Handle -> IO ()
+handshakeS h = do
+    cookie <- getUserCookie
+    name <- recvName
+    sendStatus
+    putStrLn $ "SEND_NAME received: " ++ show name
+    return ()
+
+  where
+    out = sendMessage packn (B.hPut h)
+    inf = recvMessage 2 (B.hGet h)
+    recvName = do
+        msg <- inf
+        return . flip runGet msg $ do
+            msgType <- getC
+            erlVer <- getn
+            flags <- getN
+            name <- liftM B.unpack getRemainingLazyByteString
+            return (msgType, erlVer, flags, name)
+
+    sendStatus = out . runPut $ do
+        tag 's'
+        putA "ok"
 
 epmdHost = "127.0.0.1"
 epmdPort = Service "epmd"
