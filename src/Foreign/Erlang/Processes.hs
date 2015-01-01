@@ -117,7 +117,7 @@ self nodename inbox = loop 1 [] []
         case lookup to nodes of
           Just node -> return (Just node, nodes)
           Nothing   -> do
-            (send, recv) <- erlConnect nodename to
+            (send, recv) <- erlConnectC nodename to
             mvar <- newEmptyMVar
             forkIO $ nodeSend mvar send
             forkIO $ nodeRecv mvar recv inbox

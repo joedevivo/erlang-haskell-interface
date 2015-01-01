@@ -5,13 +5,15 @@ module Foreign.Erlang.Network (
   , epmdGetPortR4
   , ErlRecv
   , ErlSend
-  , erlConnect
+  , erlConnectC
+  , erlConnectS
   , toNetwork
   , epmdSend
   , epmdAlive2Req
   , handshakeS
   ) where
 
+import Control.Concurrent       (threadDelay)
 import Control.Exception        (assert, bracketOnError)
 import Control.Monad            (liftM)
 import Data.Binary              (decode, encode)
@@ -24,7 +26,7 @@ import Data.List                (unfoldr)
 import Data.Word
 import Foreign.Erlang.Types
 import Network                  (PortID(..), connectTo, withSocketsDo)
-import Network.Socket           (PortNumber(..))
+import Network.Socket
 import Numeric                  (readHex)
 import System.Directory         (getHomeDirectory)
 import System.FilePath          ((</>))
@@ -116,8 +118,10 @@ erlRecv recv = do
       ver <- getC
       assert (ver == erlangProtocolVersion) $ getErl
 
-erlConnect           :: String -> String -> IO (ErlSend, ErlRecv)
-erlConnect self node = withSocketsDo $ do
+type Handshake = (B.ByteString -> IO ()) -> IO B.ByteString -> String -> IO ()
+
+erlConnectC           :: String -> String -> IO (ErlSend, ErlRecv)
+erlConnectC self node = withSocketsDo $ do
     port <- epmdGetPort node
     let port' = PortNumber (PortNum . fromIntegral . ntohs $ port)
     bracketOnError
@@ -125,13 +129,16 @@ erlConnect self node = withSocketsDo $ do
       hClose $ \h -> do
         let out = sendMessage packn (B.hPut h)
         let inf = recvMessage 2 (B.hGet h)
-        handshake out inf self
+        handshakeC out inf self
         let out' = sendMessage packN (\s -> B.hPut h s >> hFlush h)
         let inf' = recvMessage 4 (B.hGet h)
         return (erlSend out', erlRecv inf')
 
-handshake              :: (B.ByteString -> IO ()) -> IO B.ByteString -> String -> IO ()
-handshake out inf self = do
+--erlConnectC :: ErlConnect
+--erlConnectC = erlConnect handshakeC
+
+handshakeC  :: Handshake
+handshakeC out inf self = do
     cookie <- getUserCookie
     sendName
     recvStatus
@@ -172,17 +179,38 @@ handshake out inf self = do
         let reply = take 16 . drop 1 . map (fromIntegral . ord) . B.unpack $ msg
         assert (digest == reply) $ return ()
 
-handshakeS :: Handle -> IO ()
-handshakeS h = do
+erlConnectS :: Handle -> String -> IO (ErlSend, ErlRecv)
+erlConnectS h self = withSocketsDo $ do
+    --port <- epmdGetPort node
+    --let port' = PortNumber (PortNum . fromIntegral . ntohs $ port)
+    bracketOnError
+      (return h)
+      hClose $ \h -> do
+        let out = sendMessage packn (B.hPut h)
+        let inf = recvMessage 2 (B.hGet h)
+        handshakeS out inf self
+        let out' = sendMessage packN (\s -> B.hPut h s >> hFlush h)
+        let inf' = recvMessage 4 (B.hGet h)
+        return (erlSend out', erlRecv inf')
+
+
+handshakeS :: Handshake
+handshakeS out inf self = do
     cookie <- getUserCookie
-    name <- recvName
-    sendStatus
+    (_, _, _, name) <- recvName
     putStrLn $ "SEND_NAME received: " ++ show name
+    sendStatus
+    putStrLn $ "SEND_STATUS sent: sok"
+    challenge <- liftM fromIntegral (randomIO :: IO Int)
+    sendChallenge challenge
+    threadDelay $ 5 * 1000000
+    (challenge', reply) <- recvChallengeReply
+    putStrLn $ "SEND_CHALLENGE_REPLY received: " ++ show challenge' ++ ":" ++ show reply
+    let reply' = erlDigest cookie challenge'
+    challengeAck reply'
     return ()
 
   where
-    out = sendMessage packn (B.hPut h)
-    inf = recvMessage 2 (B.hGet h)
     recvName = do
         msg <- inf
         return . flip runGet msg $ do
@@ -195,6 +223,28 @@ handshakeS h = do
     sendStatus = out . runPut $ do
         tag 's'
         putA "ok"
+
+    sendChallenge challenge = out . runPut $ do
+        tag 'n'
+        putn erlangVersion
+        putN $ flagExtendedReferences .|. flagExtendedPidsPorts
+        putN challenge
+        putA $ self ++ "@127.0.0.1"
+
+    recvChallengeReply = do
+        msg <- inf
+        return . flip runGet msg $ do
+            tag <- getC
+            challengejr <- getWord32be
+            digest <- liftM B.unpack getRemainingLazyByteString
+            return (challengejr, digest)
+
+    challengeAck reply = out . runPut $ do
+        tag 'a'
+        puta reply
+        flush
+
+
 
 epmdHost = "127.0.0.1"
 epmdPort = Service "epmd"
