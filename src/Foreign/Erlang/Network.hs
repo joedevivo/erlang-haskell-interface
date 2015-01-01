@@ -89,6 +89,7 @@ erlSend send (Just ctl, msg) = send . runPut $ do
     tag passThrough
     putMsg ctl
     maybe (return ()) putMsg msg
+    flush
   where
     putMsg msg = do
       putC erlangProtocolVersion
@@ -118,8 +119,6 @@ erlRecv recv = do
       ver <- getC
       assert (ver == erlangProtocolVersion) $ getErl
 
-type Handshake = (B.ByteString -> IO ()) -> IO B.ByteString -> String -> IO ()
-
 erlConnectC           :: String -> String -> IO (ErlSend, ErlRecv)
 erlConnectC self node = withSocketsDo $ do
     port <- epmdGetPort node
@@ -137,7 +136,7 @@ erlConnectC self node = withSocketsDo $ do
 --erlConnectC :: ErlConnect
 --erlConnectC = erlConnect handshakeC
 
-handshakeC  :: Handshake
+handshakeC  :: (B.ByteString -> IO ()) -> IO B.ByteString -> String -> IO ()
 handshakeC out inf self = do
     cookie <- getUserCookie
     sendName
@@ -179,7 +178,7 @@ handshakeC out inf self = do
         let reply = take 16 . drop 1 . map (fromIntegral . ord) . B.unpack $ msg
         assert (digest == reply) $ return ()
 
-erlConnectS :: Handle -> String -> IO (ErlSend, ErlRecv)
+erlConnectS :: Handle -> String -> IO (String, ErlSend, ErlRecv)
 erlConnectS h self = withSocketsDo $ do
     --port <- epmdGetPort node
     --let port' = PortNumber (PortNum . fromIntegral . ntohs $ port)
@@ -188,13 +187,13 @@ erlConnectS h self = withSocketsDo $ do
       hClose $ \h -> do
         let out = sendMessage packn (B.hPut h)
         let inf = recvMessage 2 (B.hGet h)
-        handshakeS out inf self
+        to <- handshakeS out inf self
         let out' = sendMessage packN (\s -> B.hPut h s >> hFlush h)
         let inf' = recvMessage 4 (B.hGet h)
-        return (erlSend out', erlRecv inf')
+        return (to, erlSend out', erlRecv inf')
 
 
-handshakeS :: Handshake
+handshakeS :: (B.ByteString -> IO ()) -> IO B.ByteString -> String -> IO (String)
 handshakeS out inf self = do
     cookie <- getUserCookie
     (_, _, _, name) <- recvName
@@ -203,14 +202,15 @@ handshakeS out inf self = do
     putStrLn $ "SEND_STATUS sent: sok"
     challenge <- liftM fromIntegral (randomIO :: IO Int)
     sendChallenge challenge
-    threadDelay $ 5 * 1000000
+    --threadDelay $ 5 * 1000000
     (challenge', reply) <- recvChallengeReply
     putStrLn $ "SEND_CHALLENGE_REPLY received: " ++ show challenge' ++ ":" ++ show reply
     let reply' = erlDigest cookie challenge'
     challengeAck reply'
-    return ()
+    return (name)
 
   where
+    --nodename = takeWhile (\x -> x /= '@') self
     recvName = do
         msg <- inf
         return . flip runGet msg $ do
@@ -223,6 +223,7 @@ handshakeS out inf self = do
     sendStatus = out . runPut $ do
         tag 's'
         putA "ok"
+        flush
 
     sendChallenge challenge = out . runPut $ do
         tag 'n'
@@ -230,6 +231,7 @@ handshakeS out inf self = do
         putN $ flagExtendedReferences .|. flagExtendedPidsPorts
         putN challenge
         putA $ self ++ "@127.0.0.1"
+        flush
 
     recvChallengeReply = do
         msg <- inf
@@ -262,6 +264,7 @@ epmdSend msg = withEpmd $ \hdl -> do
 
 epmdAlive2Req :: String -> Int -> IO ()-- B.ByteString
 epmdAlive2Req node port = withEpmd $ \hdl -> do
+    --let name = takeWhile (\x -> x /= '@') node
     let msg = runPut $ tag 'x' >>
                        putn port >>
                        putC 77 >> -- node type

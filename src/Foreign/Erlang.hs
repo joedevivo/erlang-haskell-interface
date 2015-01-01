@@ -20,7 +20,6 @@ module Foreign.Erlang (
     module Foreign.Erlang.Network
   , module Foreign.Erlang.OTP
   , module Foreign.Erlang.Processes
-  , module Foreign.Erlang.Server
   , module Foreign.Erlang.Types
   , module Foreign.Erlang.Utilities
   ) where
@@ -28,7 +27,6 @@ module Foreign.Erlang (
 import Foreign.Erlang.Network hiding (toNetwork)
 import Foreign.Erlang.OTP
 import Foreign.Erlang.Processes
-import Foreign.Erlang.Server
 import Foreign.Erlang.Utilities
 
 import Foreign.Erlang.Types hiding (
