@@ -298,8 +298,6 @@ serve nodename outbox = S.withSocketsDo $
                  hSetBuffering connhdl NoBuffering
                  (to, send, recv) <- erlConnectS connhdl nodename
                  mvar <- newEmptyMVar
-                 -- WHY!?
-                 threadDelay 5000000
                  forkIO $ nodeSend mvar send
                  forkIO $ nodeRecv mvar recv outbox
                  let node = putMVar mvar
