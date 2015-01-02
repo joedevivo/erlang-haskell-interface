@@ -20,6 +20,8 @@ import Data.Binary              (decode, encode)
 import Data.Binary.Get
 import Data.Binary.Put
 import Data.Bits                ((.|.))
+import qualified Data.ByteString.Char8      as C
+import qualified Data.ByteString.Lazy.Char8 as B
 import Data.Char                (chr, ord)
 import Data.Digest.Pure.MD5     (md5)
 import Data.List                (unfoldr)
@@ -32,9 +34,8 @@ import System.Directory         (getHomeDirectory)
 import System.FilePath          ((</>))
 import System.IO
 import System.IO.Unsafe         (unsafePerformIO)
+import System.Log.Logger
 import System.Random            (randomIO)
-import qualified Data.ByteString.Char8      as C
-import qualified Data.ByteString.Lazy.Char8 as B
 
 erlangVersion = 5
 erlangProtocolVersion = 131
@@ -197,14 +198,14 @@ handshakeS :: (B.ByteString -> IO ()) -> IO B.ByteString -> String -> IO (String
 handshakeS out inf self = do
     cookie <- getUserCookie
     (_, _, _, name) <- recvName
-    putStrLn $ "SEND_NAME received: " ++ show name
+    debugM "Foreign.Erlang.Network" $ "SEND_NAME received: " ++ show name
     sendStatus
-    putStrLn $ "SEND_STATUS sent: sok"
+    debugM "Foreign.Erlang.Network" $ "SEND_STATUS sent: sok"
     challenge <- liftM fromIntegral (randomIO :: IO Int)
     sendChallenge challenge
     --threadDelay $ 5 * 1000000
     (challenge', reply) <- recvChallengeReply
-    putStrLn $ "SEND_CHALLENGE_REPLY received: " ++ show challenge' ++ ":" ++ show reply
+    debugM "Foreign.Erlang.Network" $ "SEND_CHALLENGE_REPLY received: " ++ show challenge' ++ ":" ++ show reply
     let reply' = erlDigest cookie challenge'
     challengeAck reply'
     return (name)

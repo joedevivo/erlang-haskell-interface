@@ -18,23 +18,22 @@ module Foreign.Erlang.Processes (
   , mboxSend
   ) where
 
-import Control.Concurrent  (forkIO, threadDelay)
+import Control.Concurrent
 import Control.Concurrent.MVar
 import Control.Monad            (liftM)
-import Data.Bits
 import Data.Binary
 import Data.Binary.Get
 import Data.Binary.Put
+import Data.Bits
+import qualified Data.ByteString.Lazy.Char8 as B
 import Data.Maybe          (fromJust)
-import qualified Network.Socket as S
-import Network.BSD
 import Data.List
-import Control.Concurrent
-import Control.Concurrent.MVar
-import System.IO
 import Foreign.Erlang.Network
 import Foreign.Erlang.Types
-import qualified Data.ByteString.Lazy.Char8 as B
+import Network.BSD
+import qualified Network.Socket as S
+import System.IO
+import System.Log.Logger
 
 -- | The name of an Erlang node on the network.
 type Node = String
@@ -67,7 +66,6 @@ genRef nodename id = ErlNewRef (ErlAtom nodename) 1 . toNetwork 4 . fromIntegral
 -- | Instantiate a Haskell node.  This initializes the FFI.
 createSelf          :: String -> IO Self
 createSelf nodename = do
-    putStrLn "createSelf"
     inbox <- newEmptyMVar
     forkIO $ serve nodename inbox
     forkIO $ self nodename inbox
@@ -79,7 +77,7 @@ self nodename inbox = loop 1 [] [] []
     --TODO: type signature for loop
     loop id registered mboxes nodes = do
         msg <- takeMVar inbox
-        putStrLn $ "msg: " ++ (show msg)
+        debugM "Foreign.Erlang.Processes" $ "loop msg recv'd: " ++ (show msg)
         case msg of
           ErlRegister mbox -> do
             let pid = genPid nodename id
@@ -95,10 +93,7 @@ self nodename inbox = loop 1 [] [] []
             loop (id+1) registered mboxes nodes
           ErlSend node pid msg -> do
             let ctl = toErlang (ErlInt 2, ErlAtom "", pid)
-            putStrLn $ "ErlSend ctl: " ++ (show ctl)
             (mnode, nodes') <- findNode node nodes
-            putStrLn $ "Node: " ++ (show mnode)
-            putStrLn $ "Nodes: " ++ (show nodes)
             case mnode of
               Just n  -> n (Just ctl, Just msg)
               Nothing -> return ()
@@ -138,6 +133,8 @@ self nodename inbox = loop 1 [] [] []
                 maybe (return ()) ($ (ErlTuple [from, msg])) $ lookup pid registered
               _ -> return ()
             loop id registered mboxes nodes
+          -- This clause is for when Erlang has connected to this node
+          -- we're just telling this node to add it to the connected nodes.
           ConnectedNode to node -> do
             case lookup to nodes of
                 Just n ->
@@ -145,7 +142,19 @@ self nodename inbox = loop 1 [] [] []
                 Nothing ->
                   loop id registered mboxes ((to, node):nodes)
           ErlStop -> return ()
+    {-
+    TODO: Wrote this so I can remove some debug putStrLns, but still need to
+          do the typing work.
+    findNode
+      to: String
+      nodes: [(String, (a->b))]
 
+      returns  (Just (a->b), nodes)
+    I'm pretty sure this is right, but it breaks, so I know i'm wrong
+
+    It's a monad thing.
+    findNode :: String -> [(String, (a -> b))] -> (Maybe (a -> b), [(String, (a -> b))])
+    -}
     findNode to nodes =
         case lookup to nodes of
           Just node -> return (Just node, nodes)
@@ -263,7 +272,7 @@ serve nodename outbox = S.withSocketsDo $
         S.bindSocket sock (S.addrAddress serveraddr)
 
         port <- S.socketPort sock
-        putStrLn $ "Opening up on port " ++ (show port)
+        debugM "Foreign.Erlang.Processes" $ "Opening up on port " ++ (show port)
 
         forkIO $ epmdAlive2Req nodename $ read $ show port
         S.listen sock 5
@@ -288,35 +297,13 @@ serve nodename outbox = S.withSocketsDo $
               do connhdl <- S.socketToHandle connsock ReadWriteMode
                  hSetBuffering connhdl NoBuffering
                  (to, send, recv) <- erlConnectS connhdl nodename
-                 putStrLn $ "erlConnectS done!"
                  mvar <- newEmptyMVar
+                 -- WHY!?
                  threadDelay 5000000
                  forkIO $ nodeSend mvar send
                  forkIO $ nodeRecv mvar recv outbox
                  let node = putMVar mvar
-
                  putMVar outbox $ ConnectedNode to node
-                   {-
-                 (mctl, mmsg) <- inf
-                 case mctl of
-                     -- Nothing is a keepalive.  All we want to do is echo it.
-                     Nothing  -> handleLog lock clientaddr $ B.pack "Nothing"
-                     -- A real message goes to self to be dispatched.
-                     Just ctl -> handleLog lock clientaddr $ B.pack $ show (fromJust mmsg)
-                  -}
-                 {-
-                 From 127.0.0.1:50869:
-                  "ErlTuple [ErlAtom \"$gen_call\",ErlTuple [ErlPid (ErlAtom \"erlang@127.0.0.1\") 38 0 2,ErlNewRef (ErlAtom \"erlang@127.0.0.1\") 2 [0,0,0,228,0,0,0,0,0,0,0,0]],ErlTuple [ErlAtom \"is_auth\",ErlAtom \"erlang@127.0.0.1\"]]"
-                 -}
-                 --messages <- B.hGetContents connhdl
-                 --mapM_ (handle lock clientaddr) (B.lines messages)
-                 --handleMessage lock nodename connhdl messages
-                 --handleLog lock clientaddr $
-                 --   B.pack "Something Erlangy this way comes"
-                 --hClose connhdl
-                 --handleLog lock clientaddr $
-                 --   B.pack "Foreign.Erlang.Server: client disconnected"
-                 -- return (out, inf)
 
           -- Lock the handler before passing data to it.
           handleLog :: MVar () -> S.SockAddr -> B.ByteString -> IO ()
@@ -325,13 +312,9 @@ serve nodename outbox = S.withSocketsDo $
           handleLog lock clientaddr msg =
               withMVar lock
                  (\a -> plainHandler clientaddr msg >> return a)
-          --handleMessage :: MVar() -> HandlerFunc
-          --handleMessage lock nodename sock msg =
-          --    withMVar lock
-          --       (\a -> erlangHandler nodename sock msg >> return a)
 
 -- A simple handler that prints incoming packets
 plainHandler ::  S.SockAddr -> B.ByteString -> IO ()
 plainHandler addr msg =
-    putStrLn $ "From " ++ show addr ++ ": " ++ show msg
+    debugM "Foreign.Erlang.Processes" $ "From " ++ show addr ++ ": " ++ show msg
 
