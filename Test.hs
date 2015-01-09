@@ -1,4 +1,5 @@
 import Control.Concurrent
+import Control.Monad            (forever)
 import Foreign.Erlang
 import System.Environment (getArgs)
 import System.Exit
@@ -21,29 +22,16 @@ start nodename = do
     mbox <- createMBox self
     debugM "Test" $ "mbox: " ++ (show mbox)
 
-    nk_mbox <- createNamedMBox "net_kernel" self
-    debugM "Test" $ "nk_mbox: " ++ (show nk_mbox)
-    --net_kernel nk_mbox
-    forkIO $ net_kernel nk_mbox
-
+    -- Rex spawned here, because it's our job as consumers of this
+    -- module to consume these
     rex_mbox <- createNamedMBox "rex" self
     forkIO $ rex rex_mbox
 
+    --forever $ do return ()
     loop 0
 
-loop x = do
-    loop x
-
-net_kernel mbox = do
-    (ErlTuple [
-        from@(ErlPid (ErlAtom node) a b c),
-        msg@(ErlTuple [_,ErlTuple [_,ref],_])
-        ]) <- mboxRecv mbox
-
-    debugM "Test" $ "net_kernel from: " ++ (show from)
-    debugM "Test" $ "            msg: " ++ (show msg)
-    mboxSend mbox node (Left from) $ ErlTuple [ref, ErlAtom "yes"]
-    net_kernel mbox
+loop n = do
+    loop n
 
 rex mbox = do
     (ErlTuple [

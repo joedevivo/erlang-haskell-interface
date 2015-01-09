@@ -69,7 +69,14 @@ createSelf nodename = do
     inbox <- newEmptyMVar
     forkIO $ serve nodename inbox
     forkIO $ self nodename inbox
-    return . Self $ putMVar inbox
+
+    node <- return .  Self $ putMVar inbox
+
+    -- Try spawning net_kernel mbox
+    nk_mbox <- createNamedMBox "net_kernel" node
+    forkIO $ net_kernel nk_mbox
+
+    return node  --Self $ putMVar inbox
 
 self                :: String -> MVar ErlMessage -> IO ()
 self nodename inbox = loop 1 [] [] []
@@ -253,6 +260,20 @@ createNamedMBox name self = do
     send self $ ErlRegisterName name (putMVar inbox)
     pid <- takeMVar inbox
     return $ MBox pid inbox self
+
+-- This is the loop that receives erlang messages to the net_kernel
+-- module. Without it, you can't ping this node
+net_kernel mbox = do
+    (ErlTuple [
+        from@(ErlPid (ErlAtom node) a b c),
+        msg@(ErlTuple [_,ErlTuple [_,ref],_])
+        ]) <- mboxRecv mbox
+
+    debugM "Test" $ "net_kernel from: " ++ (show from)
+    debugM "Test" $ "            msg: " ++ (show msg)
+    mboxSend mbox node (Left from) $ ErlTuple [ref, ErlAtom "yes"]
+    net_kernel mbox
+
 {-
 Erlang Message Listener
 -}
@@ -315,4 +336,3 @@ serve nodename outbox = S.withSocketsDo $
 plainHandler ::  S.SockAddr -> B.ByteString -> IO ()
 plainHandler addr msg =
     debugM "Foreign.Erlang.Processes" $ "From " ++ show addr ++ ": " ++ show msg
-
