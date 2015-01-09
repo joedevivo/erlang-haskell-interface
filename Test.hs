@@ -30,6 +30,7 @@ start nodename = do
     --forever $ do return ()
     loop 0
 
+-- TODO: loop n is not great. Figure out how to replace with Control.Monad (forever)
 loop n = do
     loop n
 

@@ -271,6 +271,8 @@ net_kernel mbox = do
 
     debugM "Test" $ "net_kernel from: " ++ (show from)
     debugM "Test" $ "            msg: " ++ (show msg)
+
+    -- TODO: The answer is always 'yes', maybe it shouldn't be?
     mboxSend mbox node (Left from) $ ErlTuple [ref, ErlAtom "yes"]
     net_kernel mbox
 

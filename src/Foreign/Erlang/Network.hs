@@ -282,6 +282,8 @@ epmdAlive2Req node port = withEpmd $ \hdl -> do
     hFlush hdl
     B.hGetContents hdl
     return ()
+    -- TODO: Who wants to live.... foreverrrrrr
+    -- Seriously, need to figure out how to use the Control.Monad (forever) here
     loop 0
 
 -- | Return the names and addresses of all registered Erlang nodes.
