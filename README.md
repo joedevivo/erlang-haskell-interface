@@ -25,3 +25,4 @@ In this project, the module that really talks to EPMD is
 with EPMD and will respond to "SEND_NAME" as defined by the Erlang
 Distribution Protocol
 
+![Demo](erlang-haskell.gif)
