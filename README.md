@@ -25,17 +25,3 @@ In this project, the module that really talks to EPMD is
 with EPMD and will respond to "SEND_NAME" as defined by the Erlang
 Distribution Protocol
 
-
-### Communication notes from JInterface
-
-```java
-OtpNode node = new OtpNode("node@host", "cookie");
-
-// calls
-
-OtpEpmd.publishPort(OtpNode.this);
-
-// https://github.com/erlang/otp/blob/maint/lib/jinterface/java_src/com/ericsson/otp/erlang/OtpEpmd.java#L280
-r4_publish(node);
-
-```
