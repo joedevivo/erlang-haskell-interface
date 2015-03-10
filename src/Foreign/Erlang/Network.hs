@@ -277,14 +277,11 @@ epmdAlive2Req node port = withEpmd $ \hdl -> do
                        putn 0 -- "Extra" length, 0 for none
     let len = fromIntegral $ B.length msg
     let out = runPut $ putn len >> putLazyByteString msg
-    let loop n = loop n
+    forever $ do
     B.hPut hdl out
     hFlush hdl
     B.hGetContents hdl
     return ()
-    -- TODO: Who wants to live.... foreverrrrrr
-    -- Seriously, need to figure out how to use the Control.Monad (forever) here
-    loop 0
 
 -- | Return the names and addresses of all registered Erlang nodes.
 epmdGetNames :: IO [String]

@@ -24,15 +24,10 @@ start nodename = do
 
     -- Rex spawned here, because it's our job as consumers of this
     -- module to consume these
+    forever $ do
     rex_mbox <- createNamedMBox "rex" self
     forkIO $ rex rex_mbox
-
-    --forever $ do return ()
-    loop 0
-
--- TODO: loop n is not great. Figure out how to replace with Control.Monad (forever)
-loop n = do
-    loop n
+    return ()
 
 rex mbox = do
     (ErlTuple [
